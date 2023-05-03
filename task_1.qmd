@@ -1,0 +1,107 @@
+---
+title: "Task 1 Ethnicity and Altruism After Violence: The Contact Hypothesis in Kosovo"
+author: "CKH21"
+format: html
+---
+
+## Load packages
+
+```{r}
+#| message: false
+library(here)
+library(foreign)
+
+library(psych)
+library(here)
+
+library(tidyverse)
+
+library(ggstatsplot)
+library(ggdist)
+library(stargazer)
+```
+
+
+## Read Data
+
+```{r}
+here()
+df <- read.dta(file = "data/JEPS_replication_data.dta")
+```
+
+## replicate figure 1
+
+```{r}
+df |> 
+  select(regions, d12ingroup, d12outgroup, id) |> 
+  pivot_longer(cols = c(d12ingroup, d12outgroup), names_to = "sent_to") |> 
+  mutate(sent_to = sent_to |> 
+           factor(labels = c("amount sent to ingroup", 
+                             "amount sent to outgroup"))) |> 
+  ggplot(aes(x = regions, y = value, fill = sent_to))+
+  stat_slab(side = "left", scale = 0.75, position = "dodge")+
+  stat_dots(side = "right", scale = 0.75, position = "dodge")+
+  stat_dotsinterval(scale = 0.5, quantiles = 100, position = "dodge") +
+    theme_bw()+
+  theme(legend.position = "bottom")
+```
+## modify data
+
+```{r}
+df |> 
+  mutate(regions = regions |> relevel("Primarily Serb region")) |>
+  mutate(education = education |>
+           factor(levels = c("No formal education",
+                             "Incomplete primary school",
+                             "Complete primary school",
+                             "Incomplete secondary school: technical/ vocational type",
+                             "Complete secondary school: technical/ vocational type",
+                             "Incomplete secondary school: university-preparatory type",
+                             "Complete secondary school: university-preparatory type",
+                             "Some university-level education, without degree",
+                             "University - level education, with degree",
+                             "Masters, Doctorate, Professional, Advanced studies"))) -> df_clean
+
+df_clean |> 
+  select(sawviolence, injured, familyinjured, familykilled, friendsinjured, friendskilled) |> 
+  psych::alpha() -> d
+  mutate(alphaviolence_2 = psych::alpha(sawviolence, injured, familyinjured, familykilled, friendsinjured, friendskilled))
+
+psych::alpha(d) |> _$total
+?alpha
+```
+
+
+
+## Base model
+
+```{r}
+df |> 
+  mutate(regions = regions |> relevel("Primarily Serb region")) |>  
+  lm(d12outgroup ~ regions, data = _) -> m1_base
+
+stargazer::stargazer(m1_base, type = "text", single.row=TRUE)
+```
+
+## Model with controls
+
+```{r}
+df |>
+  mutate(regions = regions |> relevel("Primarily Serb region")) |>
+  mutate(education = education |>
+           factor(levels = c("No formal education",
+                             "Incomplete primary school",
+                             "Complete primary school",
+                             "Incomplete secondary school: technical/ vocational type",
+                             "Complete secondary school: technical/ vocational type",
+                             "Incomplete secondary school: university-preparatory type",
+                             "Complete secondary school: university-preparatory type",
+                             "Some university-level education, without degree",
+                             "University - level education, with degree",
+                             "Masters, Doctorate, Professional, Advanced studies"))) |> 
+  lm(d12outgroup ~ regions + female + age + education + employed + village
+     + alphaviolence + alphadamage, data = _) -> m2_controls
+
+stargazer::stargazer(m2_controls, type = "text", single.row=TRUE)
+```
+
