@@ -2,6 +2,9 @@
 title: "Task 1 Ethnicity and Altruism After Violence: The Contact Hypothesis in Kosovo"
 author: "CKH21"
 format: html
+editor: 
+  markdown: 
+    wrap: sentence
 ---
 
 ## Load packages
@@ -19,8 +22,9 @@ library(tidyverse)
 library(ggstatsplot)
 library(ggdist)
 library(stargazer)
-```
 
+library(performance)
+```
 
 ## Read Data
 
@@ -29,7 +33,51 @@ here()
 df <- read.dta(file = "data/JEPS_replication_data.dta")
 ```
 
+1.  id = unique number given to each subject.
+
+2.  samplocation = location where sampling was conducted (primary sampling unit)
+
+3.  explocation = location of the lab where the experiment took place.
+    The Gracanica and Mitrovica labs were located in restaurant conference rooms.
+    The Leposavic and Zubin Potok labs were located in community center conference rooms.
+
+4.  expgroup = number for the experimental group.
+    All subjects completed the experiments in groups of 18-20 at the same time, with a local administrator reading from a standard script.
+
+5.  date = date when experimental group session took place.
+
+6.  serb = dummy variable indicating that all subjects are ethnic Serbs.
+
+7.  d12ingroup = amount sent in the dictator game to an in-group recipient.
+
+8.  d12outgroup = amount sent in the dictator game to an out-group recipient.
+
+9.  d12ingroupbias = dummy variable where 1 = subject gave more to in-group recipient than out-group recipient in the dictator game.
+    0 = otherwise.
+
+10. d12sametreatment = dummy variable where 1 = subject gave the same amount to in-group recipient as out-group recipient in the dictator game.
+    0 = otherwise.
+
+11. borderregion = dummy variable for border region (North Mitrovica)
+
+12. serbregion = dummy variable for Primarily Serb region (North Kosovo)
+
+13. albregion = dummy variable for Primarily Albanian region (South Kosovo)
+
+14. regions = three category variable for location of subjects (0 = Primarily Albanian region, 1 = border region, 2 = Primarily Serb region).
+    This variable is used to make the box-whisker plot in the manuscript.
+
+15. Demographics
+
+16. female 1 = female subject, 0 = male subject
+
+17. age age in years
+
+18. education 1 = no formal education to 10 = advanced higher education.
+
 ## replicate figure 1
+
+Figure 1 looks similar to one present in the data, so we have an sign that data provided for the replication is the same data as was used for the creating visualization.
 
 ```{r}
 df |> 
@@ -39,17 +87,24 @@ df |>
            factor(labels = c("amount sent to ingroup", 
                              "amount sent to outgroup"))) |> 
   ggplot(aes(x = regions, y = value, fill = sent_to))+
-  stat_slab(side = "left", scale = 0.75, position = "dodge")+
-  stat_dots(side = "right", scale = 0.75, position = "dodge")+
-  stat_dotsinterval(scale = 0.5, quantiles = 100, position = "dodge") +
-    theme_bw()+
+  geom_boxplot()+
+  # stat_slab(side = "left", scale = 0.75, position = "dodge")+
+  # stat_dots(side = "right", scale = 0.75, position = "dodge")+
+  # stat_dotsinterval(scale = 0.5, quantiles = 100, position = "dodge") +
+  theme_bw()+
   theme(legend.position = "bottom")
 ```
+
 ## modify data
+
+I will use *Primarily Serb region* as a base level to follow the original paper and encode all educational levels
 
 ```{r}
 df |> 
-  mutate(regions = regions |> relevel("Primarily Serb region")) |>
+  mutate(regions = regions |> 
+           factor(levels = c("Primarily Serb region", 
+                             "Border region",
+                             "Primarily Albanian region"))) |>
   mutate(education = education |>
            factor(levels = c("No formal education",
                              "Incomplete primary school",
@@ -61,47 +116,76 @@ df |>
                              "Some university-level education, without degree",
                              "University - level education, with degree",
                              "Masters, Doctorate, Professional, Advanced studies"))) -> df_clean
-
-df_clean |> 
-  select(sawviolence, injured, familyinjured, familykilled, friendsinjured, friendskilled) |> 
-  psych::alpha() -> d
-  mutate(alphaviolence_2 = psych::alpha(sawviolence, injured, familyinjured, familykilled, friendsinjured, friendskilled))
-
-psych::alpha(d) |> _$total
-?alpha
 ```
 
+## Hypothesis
 
+-   Null: there is no difference between the amount gifted to the outer group and the level of exposure to the outer group. 
+-   Alternative: the amount gifted to the outer group increases with higher exposure to the outer group.
 
 ## Base model
 
+Basically anova to check if there is difference in the amount gifted to outgroup based on region of living
+
 ```{r}
-df |> 
-  mutate(regions = regions |> relevel("Primarily Serb region")) |>  
+df_clean |>  
   lm(d12outgroup ~ regions, data = _) -> m1_base
 
 stargazer::stargazer(m1_base, type = "text", single.row=TRUE)
 ```
 
-## Model with controls
+Indeed there is a significant difference between Primarily Albanian region and Primarily Serb region in the amount of money participants gifted to outgroup. Therefore we have an indicator to reject null hypothesis in favor of alternative.
+
+### **Kruskal-Wallis**
+
+Given that depended (d12outgroup) variable has only 10 levels we need to double check, if the relation going to be lost with more conservative non-parametric test
 
 ```{r}
-df |>
-  mutate(regions = regions |> relevel("Primarily Serb region")) |>
-  mutate(education = education |>
-           factor(levels = c("No formal education",
-                             "Incomplete primary school",
-                             "Complete primary school",
-                             "Incomplete secondary school: technical/ vocational type",
-                             "Complete secondary school: technical/ vocational type",
-                             "Incomplete secondary school: university-preparatory type",
-                             "Complete secondary school: university-preparatory type",
-                             "Some university-level education, without degree",
-                             "University - level education, with degree",
-                             "Masters, Doctorate, Professional, Advanced studies"))) |> 
-  lm(d12outgroup ~ regions + female + age + education + employed + village
-     + alphaviolence + alphadamage, data = _) -> m2_controls
+df_clean |> 
+  ggbetweenstats(x = regions,
+                 y = d12outgroup,
+                 ylab = "out-group bridging norms (gifting to out-group)",
+                 violin.args = list(width = 0),
+                 type = "np")
+```
+
+After looking at the Kruskall-Wallis results we could indeed validate that there is a difference between participants from different regions in terms of median amount of money that was gifted to outer group
+
+Dunn test indicates that there is a significant difference Between primary Serb region and primary Albanian region
+
+## Model with controls
+
+To see if there any other parameters in the model let's add all the controls from the data.
+
+*explocation* variable should absorb selection bias, since it corresponds to a different location of data collection
+
+```{r}
+df_clean |>
+  lm(
+    d12outgroup ~ regions + female + age + education + employed + village
+    + alphaviolence + alphadamaged + 
+      explocation,
+    data = _
+  ) -> m2_controls
 
 stargazer::stargazer(m2_controls, type = "text", single.row=TRUE)
+```
+
+The difference between Primarily Albanian region and Primarily Serb region is significant and positive, so we could conclude that exposure to out-group increases altruism towards out-group, given the present control variables
+
+### diagnostics
+
+```{r}
+check_model(m2_controls)
+```
+
+Diagnosis looks good enough
+
+## citations
+
+```{r}
+citation("performance")
+citation("stargazer")
+citation("ggstatsplot")
 ```
 
