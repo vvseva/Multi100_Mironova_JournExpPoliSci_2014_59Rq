@@ -1,0 +1,139 @@
+---
+title: "task_2"
+author: "CKH21"
+format: html
+editor: 
+  markdown: 
+    wrap: sentence
+---
+
+## Requirements
+
+Your analysis should produce a single, main result in terms of statistical families of z-, t-, F-, or χ² tests (or their alternative or non-parametric versions).
+
+You **should not control** for age, gender, education, employment (a proxy for income), urban vs. rural locations, victimization by violence, property damage due to violence, and displacement by violence.
+You should not use Tobit Regression in your analysis.
+
+## Load packages
+
+```{r}
+#| message: false
+library(here)
+library(foreign)
+
+library(psych)
+library(here)
+
+library(tidyverse)
+
+library(ggstatsplot)
+library(ggdist)
+library(stargazer)
+
+library(performance)
+
+library(coin)
+library(dunn.test)
+library(rstatix)
+```
+
+## Read Data
+
+Let's start by reading the original data
+
+```{r}
+here()
+df <- read.dta(file = "data/JEPS_replication_data.dta") |> 
+    mutate(regions = regions |> 
+           factor(levels = c("Primarily Serb region", 
+                             "Border region",
+                             "Primarily Albanian region")))
+```
+
+1.  d12outgroup = amount sent in the dictator game to an out-group recipient.
+
+2.  regions = three category variable for location of subjects (0 = Primarily Albanian region, 1 = border region, 2 = Primarily Serb region).
+    This variable is used to make the box-whisker plot in the manuscript.
+
+## independence test
+
+In order to check the original claim " out-group bridging \... norms increase with exposure to the out-group" we will use permutation alternative to anova as a heuristic for the following analysis and test whether amount of money gifted to out group increases with exposure to out-group.
+
+```{r}
+df |>  
+  independence_test(d12outgroup ~ regions, data = _,
+                    alternative = "greater") 
+```
+
+After spotting the difference, we could do all statistical rituals to decide if we could or could not use ANOVA, but hopefully the outcome remain untouched.
+
+### test normality of groups
+
+```{r}
+df |> 
+  filter(regions == "Primarily Serb region") |> 
+  pull(d12outgroup) |> 
+  shapiro.test()
+
+df |> 
+  filter(regions == "Border region") |> 
+  pull(d12outgroup) |> 
+  shapiro.test()
+
+df |> 
+  filter(regions == "Primarily Albanian region") |> 
+  pull(d12outgroup) |> 
+  shapiro.test()
+
+df |> 
+  ggplot(aes(y = regions, x = d12outgroup, fill = regions)) +
+  stat_slab(aes(thickness = after_stat(pdf*n)), scale = 0.7) +
+  stat_dotsinterval(side = "bottom", scale = 0.7, slab_linewidth = NA) +
+  scale_fill_brewer(palette = "Set2")+
+  theme_minimal()+
+  theme(legend.position = "bottom")
+
+```
+
+The amount of money from 0 to 5, gifted to out group is obviously non normally distributed, and that is a violation of the classical ANOVA.
+
+### test  homogeneity of variances
+
+```{r}
+df |> 
+  bartlett.test(d12outgroup ~ regions, data = _)
+```
+
+However, Variance among groups is most likely equal, so we are not violating this assumption, and could safely use non-parametric
+
+### A non-parametric equivalent to one-way ANOVA (kruskal_test)
+
+```{r}
+df |> 
+  coin::kruskal_test(d12outgroup ~ regions, data = _,
+              var.equal = TRUE)
+```
+
+The difference in median among groups is statistically significant, so that we could move for pairwise comparison of groups.
+
+### Post-hoc
+
+```{r}
+?dunn_test
+df |> 
+  dunn_test(d12outgroup ~ regions, data = _, detailed = TRUE) |> 
+  kableExtra::kable()
+```
+
+Dunn test provides evidence that there is a difference in median amount gifted to out group between Serbians who live in *Primarily Serb region* and *Primarily Albanian region.*
+
+```{r}
+df |> 
+  ggbetweenstats(x = regions,
+                 y = d12outgroup,
+                 ylab = "out-group bridging norms (gifting to out-group)",
+                 violin.args = list(width = 0),
+                 type = "np")
+```
+
+We could clearly visualize the difference in medians, and with good certainty claim that **out-group bridging norms** (measured as amount gifted to out-group) **increase with exposure to the out-group** (approximated by place of living) for Serbians.
